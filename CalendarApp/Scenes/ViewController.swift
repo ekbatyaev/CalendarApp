@@ -1,101 +1,77 @@
 import UIKit
 
-
-
-struct Ticket {
-    let date: String
-    let price: Int
-    let airport: String
-    let source: String
-}
-
 enum CalendarTab: Int {
-    case tickets
+    case today
     case calendar
-    case profile
-}
-
-actor TicketStore
-{
-    private var tickets: [Ticket] = []
-    
-    func clear(){
-        tickets.removeAll()
-    }
-    
-    func add(_ newTickets: [Ticket]) -> Int{
-        tickets.append(contentsOf:  newTickets)
-        tickets.sort{$0.price < $1.price}
-        return tickets.count
-    }
-    
-    func allTickets() -> [Ticket]{
-        tickets
-    }
-    
-    func count() -> Int{
-        tickets.count
-    }
+    case tasks
 }
 
 @MainActor
 final class ViewController: UIViewController {
-    
+
     // MARK: - Properties
-    
-    private let ticketStore = TicketStore()
+
     private let calendarEventStore = CalendarEventStore()
 
-    private var displayedTickets: [Ticket] = []
+    private var todayEvents: [CalendarEvent] = []
 
     private lazy var calendarViewController = CalendarViewController(
         eventStore: calendarEventStore
     )
-    
+
+    private lazy var taskViewController = TaskViewController(
+        eventStore: calendarEventStore
+    )
+
+    private var selectedTab: CalendarTab = .today
+
     // MARK: - Subviews
-    
-    private lazy var find_tickets_button: UIButton = {
-        let button = UIButton(type: .system)
-        button.setTitle("Найти билеты", for: .normal)
-        button.backgroundColor = .systemBlue
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
-        button.layer.cornerRadius = 20
-        button.layer.masksToBounds = true
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.addTarget(self, action: #selector(find_tickets_button_tapped), for: .touchUpInside)
-        return button
+
+    private lazy var title_label: UILabel = {
+        let label = UILabel()
+        label.text = "Сегодня"
+        label.textColor = .black
+        label.font = .systemFont(ofSize: 32, weight: .bold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
     }()
-    
-    private lazy var activity_indicator: UIActivityIndicatorView = {
-        let indicator = UIActivityIndicatorView(style: .large)
-        indicator.color = .systemBlue
-        indicator.hidesWhenStopped = true
-        indicator.translatesAutoresizingMaskIntoConstraints = false
-        return indicator
-    }()
-    
+
     private lazy var status_label: UILabel = {
         let label = UILabel()
-        label.text = "Нажмите кнопку, чтобы начать поиск"
-        label.textColor = .systemBlue
-        label.textAlignment = .center
-        label.alpha = 0.8
-        label.font = .systemFont(ofSize: 18, weight: .medium)
+        label.text = "Задачи на сегодня"
+        label.textColor = .systemGray
+        label.textAlignment = .left
+        label.font = .systemFont(ofSize: 17, weight: .medium)
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
-    
+
     private lazy var table_view: UITableView = {
         let table = UITableView()
-        table.backgroundColor = .white
+        table.backgroundColor = .clear
         table.translatesAutoresizingMaskIntoConstraints = false
         table.dataSource = self
-        table.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+        table.delegate = self
+        table.register(TodayTaskCell.self, forCellReuseIdentifier: TodayTaskCell.reuseIdentifier)
+        table.separatorStyle = .none
+        table.rowHeight = 78
+        table.showsVerticalScrollIndicator = true
+        table.alwaysBounceVertical = true
+        table.contentInset = UIEdgeInsets(top: 8, left: 0, bottom: 16, right: 0)
         return table
     }()
-    
+
+    private lazy var empty_label: UILabel = {
+        let label = UILabel()
+        label.text = "На сегодня задач нет"
+        label.textColor = .systemGray
+        label.textAlignment = .center
+        label.font = .systemFont(ofSize: 17, weight: .medium)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
     private lazy var calendar_container_view: UIView = {
         let view = UIView()
         view.backgroundColor = .clear
@@ -103,8 +79,14 @@ final class ViewController: UIViewController {
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
-    
-    private var selectedTab: CalendarTab = .tickets
+
+    private lazy var tasks_container_view: UIView = {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
 
     private lazy var customTabBar: UIView = {
         let view = UIView()
@@ -118,45 +100,50 @@ final class ViewController: UIViewController {
         return view
     }()
 
-    private lazy var ticketsTabButton = makeTabButton(
+    private lazy var todayTabButton = makeTabButton(
         title: "Сегодня",
         imageName: "list.bullet.rectangle",
-        tag: CalendarTab.tickets.rawValue
+        tag: CalendarTab.today.rawValue
     )
-    
+
     private lazy var calendarTabButton = makeTabButton(
         title: "Календарь",
         imageName: "calendar",
         tag: CalendarTab.calendar.rawValue
     )
-    
-    private lazy var profileTabButton = makeTabButton(
+
+    private lazy var tasksTabButton = makeTabButton(
         title: "Задачи",
         imageName: "list.bullet.clipboard",
-        tag: CalendarTab.profile.rawValue
+        tag: CalendarTab.tasks.rawValue
     )
-    
-    // MARK: - Methods
-    
+
+    // MARK: - Lifecycle
+
     override func viewDidLoad() {
         super.viewDidLoad()
+
         configureUI()
+        reloadTodayEvents()
     }
-    
+
+    // MARK: - Configuration
+
     private func configureUI() {
         view.backgroundColor = .systemGroupedBackground
 
-        view.addSubview(find_tickets_button)
-        view.addSubview(activity_indicator)
+        view.addSubview(title_label)
         view.addSubview(status_label)
         view.addSubview(table_view)
+        view.addSubview(empty_label)
         view.addSubview(calendar_container_view)
+        view.addSubview(tasks_container_view)
         view.addSubview(customTabBar)
 
         let tabStack = UIStackView(arrangedSubviews: [
-            ticketsTabButton,
+            todayTabButton,
             calendarTabButton,
-            profileTabButton
+            tasksTabButton
         ])
 
         tabStack.axis = .horizontal
@@ -167,25 +154,31 @@ final class ViewController: UIViewController {
         customTabBar.addSubview(tabStack)
 
         NSLayoutConstraint.activate([
+            title_label.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            title_label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            title_label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
 
-            find_tickets_button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            find_tickets_button.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            find_tickets_button.widthAnchor.constraint(equalToConstant: 250),
-            find_tickets_button.heightAnchor.constraint(equalToConstant: 70),
-
-            activity_indicator.topAnchor.constraint(equalTo: find_tickets_button.bottomAnchor, constant: 20),
-            activity_indicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-
-            status_label.topAnchor.constraint(equalTo: activity_indicator.bottomAnchor, constant: 20),
+            status_label.topAnchor.constraint(equalTo: title_label.bottomAnchor, constant: 6),
             status_label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             status_label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
 
-            table_view.topAnchor.constraint(equalTo: status_label.bottomAnchor, constant: 20),
+            table_view.topAnchor.constraint(equalTo: status_label.bottomAnchor, constant: 12),
             table_view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             table_view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-
-            // Главное изменение: таблица заканчивается выше tab bar
             table_view.bottomAnchor.constraint(equalTo: customTabBar.topAnchor, constant: -16),
+
+            empty_label.centerXAnchor.constraint(equalTo: table_view.centerXAnchor),
+            empty_label.centerYAnchor.constraint(equalTo: table_view.centerYAnchor),
+
+            calendar_container_view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            calendar_container_view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            calendar_container_view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            calendar_container_view.bottomAnchor.constraint(equalTo: customTabBar.topAnchor, constant: -16),
+
+            tasks_container_view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tasks_container_view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tasks_container_view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tasks_container_view.bottomAnchor.constraint(equalTo: customTabBar.topAnchor, constant: -16),
 
             customTabBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             customTabBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
@@ -195,23 +188,21 @@ final class ViewController: UIViewController {
             tabStack.topAnchor.constraint(equalTo: customTabBar.topAnchor, constant: 8),
             tabStack.leadingAnchor.constraint(equalTo: customTabBar.leadingAnchor, constant: 8),
             tabStack.trailingAnchor.constraint(equalTo: customTabBar.trailingAnchor, constant: -8),
-            tabStack.bottomAnchor.constraint(equalTo: customTabBar.bottomAnchor, constant: -8),
-            
-            calendar_container_view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 0),
-            calendar_container_view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            calendar_container_view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            calendar_container_view.bottomAnchor.constraint(equalTo: customTabBar.topAnchor, constant: -16),
+            tabStack.bottomAnchor.constraint(equalTo: customTabBar.bottomAnchor, constant: -8)
         ])
 
-        table_view.backgroundColor = .clear
-        table_view.layer.cornerRadius = 18
-        table_view.clipsToBounds = true
-    
         addCalendarController()
-        
+        addTaskController()
+
+        taskViewController.onEventCreated = { [weak self] in
+            self?.reloadTodayEvents()
+            self?.calendarViewController.refreshEvents()
+        }
+
         updateTabBarAppearance()
+        updateScreenForSelectedTab()
     }
-    
+
     private func makeTabButton(title: String, imageName: String, tag: Int) -> UIButton {
         let button = UIButton(type: .system)
 
@@ -230,28 +221,6 @@ final class ViewController: UIViewController {
         return button
     }
 
-    @objc private func tabButtonTapped(_ sender: UIButton) {
-        guard let tab = CalendarTab(rawValue: sender.tag) else { return }
-
-        selectedTab = tab
-        updateTabBarAppearance()
-        updateScreenForSelectedTab()
-    }
-
-    private func updateTabBarAppearance() {
-        let buttons = [ticketsTabButton, calendarTabButton, profileTabButton]
-
-        for button in buttons {
-            let isSelected = button.tag == selectedTab.rawValue
-
-            button.configuration?.baseForegroundColor = isSelected ? .systemBlue : .systemGray
-            button.titleLabel?.font = .systemFont(
-                ofSize: 13,
-                weight: isSelected ? .semibold : .regular
-            )
-        }
-    }
-
     private func addCalendarController() {
         addChild(calendarViewController)
         calendar_container_view.addSubview(calendarViewController.view)
@@ -267,131 +236,307 @@ final class ViewController: UIViewController {
 
         calendarViewController.didMove(toParent: self)
     }
-    
-    private func updateScreenForSelectedTab() {
-        switch selectedTab {
-        case .tickets:
-            status_label.text = "Нажмите кнопку, чтобы начать поиск"
 
-            find_tickets_button.isHidden = false
-            activity_indicator.isHidden = false
-            status_label.isHidden = false
-            table_view.isHidden = false
+    private func addTaskController() {
+        addChild(taskViewController)
+        tasks_container_view.addSubview(taskViewController.view)
 
-            calendar_container_view.isHidden = true
+        taskViewController.view.translatesAutoresizingMaskIntoConstraints = false
 
-        case .calendar:
-            find_tickets_button.isHidden = true
-            activity_indicator.isHidden = true
-            status_label.isHidden = true
-            table_view.isHidden = true
+        NSLayoutConstraint.activate([
+            taskViewController.view.topAnchor.constraint(equalTo: tasks_container_view.topAnchor),
+            taskViewController.view.leadingAnchor.constraint(equalTo: tasks_container_view.leadingAnchor),
+            taskViewController.view.trailingAnchor.constraint(equalTo: tasks_container_view.trailingAnchor),
+            taskViewController.view.bottomAnchor.constraint(equalTo: tasks_container_view.bottomAnchor)
+        ])
 
-            calendar_container_view.isHidden = false
-
-        case .profile:
-            status_label.text = "Здесь будут задачи"
-
-            find_tickets_button.isHidden = true
-            activity_indicator.isHidden = true
-            status_label.isHidden = false
-            table_view.isHidden = true
-
-            calendar_container_view.isHidden = true
-        }
+        taskViewController.didMove(toParent: self)
     }
-    
-    @objc private func find_tickets_button_tapped() {
-        start_search()
-    }
-    
-    private func start_search() {
-        displayedTickets.removeAll()
-        table_view.reloadData()
-        
-        find_tickets_button.isEnabled = false
-        find_tickets_button.alpha = 0.6
-        activity_indicator.startAnimating()
-        status_label.text = "Ищу самые выгодные билеты..."
-        
+
+    // MARK: - Data
+
+    private func reloadTodayEvents() {
         Task { [weak self] in
             guard let self else { return }
-            
-            await self.ticketStore.clear()
-            
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { [weak self] in
-                    await self?.runSearch(sourceName: "Aviasales")
-                }
-                group.addTask { [weak self] in
-                    await self?.runSearch(sourceName: "Skyscanner")
-                }
-                group.addTask { [weak self] in
-                    await self?.runSearch(sourceName: "Tutu")
-                }
-                group.addTask { [weak self] in
-                    await self?.runSearch(sourceName: "Google Flights")
-                }
-            }
-            
-            self.displayedTickets = await self.ticketStore.allTickets()
+
+            let events = await self.calendarEventStore.events(for: Date())
+
+            self.todayEvents = events
+
+            self.status_label.text = events.isEmpty
+                ? "На сегодня задач нет"
+                : "Задачи на сегодня: \(events.count)"
+
+            self.empty_label.isHidden = !events.isEmpty
+            self.table_view.isHidden = events.isEmpty
+
             self.table_view.reloadData()
-            
-            self.activity_indicator.stopAnimating()
-            self.find_tickets_button.isEnabled = true
-            self.find_tickets_button.alpha = 1.0
-            self.status_label.text = "Поиск завершён. Найдено билетов: \(self.displayedTickets.count)"
         }
     }
-    
-    private func runSearch(sourceName: String) async {
-        let delay = Int.random(in: 1...15)
-        print("\(sourceName) начал поиск. Время: \(delay) сек.")
-        
-        try? await Task.sleep(for: .seconds(delay))
-        
-        let foundTickets = generate_tickets(source: sourceName)
-        let totalCount = await ticketStore.add(foundTickets)
-        
-        displayedTickets = await ticketStore.allTickets()
-        status_label.text = "\(sourceName) завершил поиск. Найдено билетов: \(totalCount)"
-        table_view.reloadData()
+
+    private func deleteTodayEvent(at index: Int) {
+        guard todayEvents.indices.contains(index) else {
+            return
+        }
+
+        let event = todayEvents[index]
+        let indexPath = IndexPath(row: index, section: 0)
+
+        todayEvents.remove(at: index)
+
+        table_view.performBatchUpdates {
+            table_view.deleteRows(at: [indexPath], with: .automatic)
+        } completion: { [weak self] _ in
+            guard let self else { return }
+
+            self.empty_label.isHidden = !self.todayEvents.isEmpty
+            self.table_view.isHidden = self.todayEvents.isEmpty
+
+            self.status_label.text = self.todayEvents.isEmpty
+                ? "На сегодня задач нет"
+                : "Задачи на сегодня: \(self.todayEvents.count)"
+
+            Task { [weak self] in
+                guard let self else { return }
+
+                await self.calendarEventStore.delete(event)
+
+                self.calendarViewController.refreshEvents()
+                self.taskViewController.refreshEvents()
+            }
+        }
     }
-    
-    private func generate_tickets(source: String) -> [Ticket] {
-        let possible_tickets: [Ticket] = [
-            Ticket(date: "05.04.2026 08:40", price: 12500, airport: "SVO → LED", source: source),
-            Ticket(date: "05.04.2026 10:15", price: 9900, airport: "DME → KZN", source: source),
-            Ticket(date: "05.04.2026 13:20", price: 15300, airport: "VKO → AER", source: source),
-            Ticket(date: "05.04.2026 16:05", price: 11700, airport: "SVO → EKB", source: source),
-            Ticket(date: "05.04.2026 19:45", price: 8600, airport: "DME → LED", source: source),
-            Ticket(date: "05.04.2026 21:10", price: 14200, airport: "VKO → KGD", source: source)
-        ]
-        
-        let count = Int.random(in: 1...4)
-        return Array(possible_tickets.shuffled().prefix(count))
+
+    // MARK: - Tabs
+
+    @objc private func tabButtonTapped(_ sender: UIButton) {
+        guard let tab = CalendarTab(rawValue: sender.tag) else { return }
+
+        selectedTab = tab
+        updateTabBarAppearance()
+        updateScreenForSelectedTab()
+    }
+
+    private func updateTabBarAppearance() {
+        let buttons = [todayTabButton, calendarTabButton, tasksTabButton]
+
+        for button in buttons {
+            let isSelected = button.tag == selectedTab.rawValue
+
+            button.configuration?.baseForegroundColor = isSelected ? .systemBlue : .systemGray
+            button.titleLabel?.font = .systemFont(
+                ofSize: 13,
+                weight: isSelected ? .semibold : .regular
+            )
+        }
+    }
+
+    private func updateScreenForSelectedTab() {
+        switch selectedTab {
+        case .today:
+            title_label.isHidden = false
+            status_label.isHidden = false
+
+            table_view.isHidden = todayEvents.isEmpty
+            empty_label.isHidden = !todayEvents.isEmpty
+
+            calendar_container_view.isHidden = true
+            tasks_container_view.isHidden = true
+
+            reloadTodayEvents()
+
+        case .calendar:
+            title_label.isHidden = true
+            status_label.isHidden = true
+            table_view.isHidden = true
+            empty_label.isHidden = true
+
+            calendar_container_view.isHidden = false
+            tasks_container_view.isHidden = true
+
+            calendarViewController.refreshEvents()
+
+        case .tasks:
+            title_label.isHidden = true
+            status_label.isHidden = true
+            table_view.isHidden = true
+            empty_label.isHidden = true
+
+            calendar_container_view.isHidden = true
+            tasks_container_view.isHidden = false
+
+            taskViewController.refreshEvents()
+        }
+    }
+
+    @objc private func doneButtonTapped(_ sender: UIButton) {
+        sender.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
+        sender.tintColor = .systemGreen
+        sender.isUserInteractionEnabled = false
+
+        UIView.animate(withDuration: 0.15) {
+            sender.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+        } completion: { [weak self] _ in
+            UIView.animate(withDuration: 0.12) {
+                sender.transform = .identity
+            } completion: { [weak self] _ in
+                self?.deleteTodayEvent(at: sender.tag)
+            }
+        }
     }
 }
 
-extension ViewController: UITableViewDataSource {
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        displayedTickets.count
+// MARK: - UITableViewDataSource, UITableViewDelegate
+
+extension ViewController: UITableViewDataSource, UITableViewDelegate {
+
+    func tableView(
+        _ tableView: UITableView,
+        numberOfRowsInSection section: Int
+    ) -> Int {
+        todayEvents.count
     }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let ticket = displayedTickets[indexPath.row]
-        let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-        
-        var content = cell.defaultContentConfiguration()
-        content.text = "\(ticket.airport) • \(ticket.price) ₽"
-        content.secondaryText = "Дата: \(ticket.date) | Источник: \(ticket.source)"
-        
-        content.textProperties.color = .black
-        content.secondaryTextProperties.color = .gray
-        
-        cell.backgroundColor = .white
-        cell.contentConfiguration = content
-        
-        return cell
+
+    func tableView(
+        _ tableView: UITableView,
+        cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+        let event = todayEvents[indexPath.row]
+
+        let cell = tableView.dequeueReusableCell(
+            withIdentifier: TodayTaskCell.reuseIdentifier,
+            for: indexPath
+        )
+
+        guard let todayCell = cell as? TodayTaskCell else {
+            return cell
+        }
+
+        todayCell.configure(
+            title: event.title,
+            subtitle: makeSubtitle(for: event),
+            index: indexPath.row,
+            target: self,
+            action: #selector(doneButtonTapped(_:))
+        )
+
+        return todayCell
+    }
+
+    private func makeSubtitle(for event: CalendarEvent) -> String {
+        if event.isAllDay {
+            return event.description.isEmpty
+                ? "Весь день"
+                : "Весь день • \(event.description)"
+        } else {
+            return event.description.isEmpty
+                ? "\(event.time ?? "")"
+                : "\(event.time ?? "") • \(event.description)"
+        }
+    }
+}
+
+// MARK: - TodayTaskCell
+
+final class TodayTaskCell: UITableViewCell {
+
+    static let reuseIdentifier = "TodayTaskCell"
+
+    private let card_view: UIView = {
+        let view = UIView()
+        view.backgroundColor = .white
+        view.layer.cornerRadius = 18
+        view.layer.masksToBounds = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let title_label: UILabel = {
+        let label = UILabel()
+        label.textColor = .black
+        label.font = .systemFont(ofSize: 17, weight: .semibold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let subtitle_label: UILabel = {
+        let label = UILabel()
+        label.textColor = .systemGray
+        label.font = .systemFont(ofSize: 14, weight: .regular)
+        label.numberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let done_button: UIButton = {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "circle"), for: .normal)
+        button.tintColor = .systemBlue
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+
+        configureUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+
+        title_label.text = nil
+        subtitle_label.text = nil
+        done_button.removeTarget(nil, action: nil, for: .allEvents)
+        done_button.tag = 0
+    }
+
+    private func configureUI() {
+        backgroundColor = .clear
+        contentView.backgroundColor = .clear
+        selectionStyle = .none
+
+        contentView.addSubview(card_view)
+        card_view.addSubview(title_label)
+        card_view.addSubview(subtitle_label)
+        card_view.addSubview(done_button)
+
+        NSLayoutConstraint.activate([
+            card_view.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
+            card_view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            card_view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            card_view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
+
+            done_button.trailingAnchor.constraint(equalTo: card_view.trailingAnchor, constant: -16),
+            done_button.centerYAnchor.constraint(equalTo: card_view.centerYAnchor),
+            done_button.widthAnchor.constraint(equalToConstant: 34),
+            done_button.heightAnchor.constraint(equalToConstant: 34),
+
+            title_label.topAnchor.constraint(equalTo: card_view.topAnchor, constant: 13),
+            title_label.leadingAnchor.constraint(equalTo: card_view.leadingAnchor, constant: 16),
+            title_label.trailingAnchor.constraint(equalTo: done_button.leadingAnchor, constant: -12),
+
+            subtitle_label.topAnchor.constraint(equalTo: title_label.bottomAnchor, constant: 4),
+            subtitle_label.leadingAnchor.constraint(equalTo: title_label.leadingAnchor),
+            subtitle_label.trailingAnchor.constraint(equalTo: title_label.trailingAnchor)
+        ])
+    }
+
+    func configure(
+        title: String,
+        subtitle: String,
+        index: Int,
+        target: Any?,
+        action: Selector
+    ) {
+        title_label.text = title
+        subtitle_label.text = subtitle
+
+        done_button.tag = index
+        done_button.addTarget(target, action: action, for: .touchUpInside)
     }
 }

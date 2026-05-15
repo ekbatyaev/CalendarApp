@@ -22,6 +22,19 @@ actor CalendarEventStore {
         sortEvents()
         save()
     }
+    
+    func delete(_ event: CalendarEvent) {
+        delete(id: event.id)
+    }
+
+    func delete(id: UUID) {
+        events.removeAll { event in
+            event.id == id
+        }
+
+        save()
+    }
+    
 
     func events(for date: Date) -> [CalendarEvent] {
         let calendar = Calendar.current
@@ -64,6 +77,7 @@ actor CalendarEventStore {
 
             events = try decoder.decode([CalendarEvent].self, from: data)
             sortEvents()
+            save()
         } catch {
             print("Ошибка чтения calendar_events.json:", error)
             events = []

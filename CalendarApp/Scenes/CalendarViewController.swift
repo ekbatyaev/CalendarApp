@@ -9,10 +9,141 @@ struct CalendarDay {
 }
 
 
+final class CalendarEventCell: UITableViewCell {
+
+    static let reuseIdentifier = "CalendarEventCell"
+
+    private let card_view: UIView = {
+        let view = UIView()
+        view.backgroundColor = .white
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.clipsToBounds = true
+        return view
+    }()
+
+    private let title_label: UILabel = {
+        let label = UILabel()
+        label.textColor = .black
+        label.font = .systemFont(ofSize: 17, weight: .semibold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let subtitle_label: UILabel = {
+        let label = UILabel()
+        label.textColor = .systemGray
+        label.font = .systemFont(ofSize: 14, weight: .regular)
+        label.numberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let separator_view: UIView = {
+        let view = UIView()
+        view.backgroundColor = .systemGray5
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+
+        configureUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+
+        title_label.text = nil
+        subtitle_label.text = nil
+        separator_view.isHidden = false
+        card_view.layer.cornerRadius = 0
+        card_view.layer.maskedCorners = []
+    }
+
+    private func configureUI() {
+        backgroundColor = .clear
+        contentView.backgroundColor = .clear
+        selectionStyle = .none
+
+        contentView.addSubview(card_view)
+        card_view.addSubview(title_label)
+        card_view.addSubview(subtitle_label)
+        card_view.addSubview(separator_view)
+
+        NSLayoutConstraint.activate([
+            card_view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            card_view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            card_view.topAnchor.constraint(equalTo: contentView.topAnchor),
+            card_view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            title_label.leadingAnchor.constraint(equalTo: card_view.leadingAnchor, constant: 16),
+            title_label.trailingAnchor.constraint(equalTo: card_view.trailingAnchor, constant: -16),
+            title_label.topAnchor.constraint(equalTo: card_view.topAnchor, constant: 12),
+
+            subtitle_label.leadingAnchor.constraint(equalTo: title_label.leadingAnchor),
+            subtitle_label.trailingAnchor.constraint(equalTo: title_label.trailingAnchor),
+            subtitle_label.topAnchor.constraint(equalTo: title_label.bottomAnchor, constant: 4),
+
+            separator_view.leadingAnchor.constraint(equalTo: card_view.leadingAnchor, constant: 16),
+            separator_view.trailingAnchor.constraint(equalTo: card_view.trailingAnchor),
+            separator_view.bottomAnchor.constraint(equalTo: card_view.bottomAnchor),
+            separator_view.heightAnchor.constraint(equalToConstant: 1)
+        ])
+    }
+
+    func configure(
+        title: String,
+        subtitle: String,
+        indexPath: IndexPath,
+        rowsCount: Int
+    ) {
+        title_label.text = title
+        subtitle_label.text = subtitle
+
+        let isFirst = indexPath.row == 0
+        let isLast = indexPath.row == rowsCount - 1
+
+        card_view.layer.cornerRadius = 16
+
+        if rowsCount == 1 {
+            card_view.layer.maskedCorners = [
+                .layerMinXMinYCorner,
+                .layerMaxXMinYCorner,
+                .layerMinXMaxYCorner,
+                .layerMaxXMaxYCorner
+            ]
+            separator_view.isHidden = true
+        } else if isFirst {
+            card_view.layer.maskedCorners = [
+                .layerMinXMinYCorner,
+                .layerMaxXMinYCorner
+            ]
+            separator_view.isHidden = false
+        } else if isLast {
+            card_view.layer.maskedCorners = [
+                .layerMinXMaxYCorner,
+                .layerMaxXMaxYCorner
+            ]
+            separator_view.isHidden = true
+        } else {
+            card_view.layer.cornerRadius = 0
+            card_view.layer.maskedCorners = []
+            separator_view.isHidden = false
+        }
+    }
+}
+
 @MainActor
 final class CalendarViewController: UIViewController {
 
     private let eventStore: CalendarEventStore
+    
+    private var collectionViewHeightConstraint: NSLayoutConstraint?
 
     private var calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -101,13 +232,12 @@ final class CalendarViewController: UIViewController {
         table.backgroundColor = .clear
         table.dataSource = self
         table.delegate = self
-        table.register(UITableViewCell.self, forCellReuseIdentifier: "event_cell")
+        table.register(CalendarEventCell.self, forCellReuseIdentifier: CalendarEventCell.reuseIdentifier)
         table.translatesAutoresizingMaskIntoConstraints = false
-        table.layer.cornerRadius = 16
-        table.clipsToBounds = true
         table.alwaysBounceVertical = true
         table.showsVerticalScrollIndicator = true
         table.separatorStyle = .none
+        table.contentInset = UIEdgeInsets(top: 8, left: 0, bottom: 16, right: 0)
         return table
     }()
 
@@ -122,6 +252,8 @@ final class CalendarViewController: UIViewController {
     }()
 
     // MARK: - Lifecycle
+    
+    
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -131,47 +263,12 @@ final class CalendarViewController: UIViewController {
         reloadCalendar()
         reloadEventsForSelectedDate()
 
-        Task {
-            await eventStore.add(
-                CalendarEvent(
-                    title: "Тестовое дело",
-                    date: Date(),
-                    time: "14:30",
-                    isAllDay: false,
-                    description: "Проверка таблицы событий"
-                )
-            )
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
 
-            reloadEventsForSelectedDate()
-        }
-        
-        Task {
-            await eventStore.add(
-                CalendarEvent(
-                    title: "Тестовое дело",
-                    date: Date(),
-                    time: "15:30",
-                    isAllDay: true,
-                    description: "Тесты тестыытвытвтфыв"
-                )
-            )
-
-            reloadEventsForSelectedDate()
-        }
-        
-        Task {
-            await eventStore.add(
-                CalendarEvent(
-                    title: "Тестовое дело",
-                    date: Date(),
-                    time: "15:30",
-                    isAllDay: true,
-                    description: "Тесты тестыытвытвтфыв"
-                )
-            )
-
-            reloadEventsForSelectedDate()
-        }
+        reloadEventsForSelectedDate()
     }
 
     // MARK: - Methods
@@ -187,6 +284,8 @@ final class CalendarViewController: UIViewController {
         view.addSubview(selected_date_label)
         view.addSubview(events_table_view)
         view.addSubview(empty_events_label)
+        
+        collectionViewHeightConstraint = collection_view.heightAnchor.constraint(equalToConstant: 300)
         
         NSLayoutConstraint.activate([
             month_label.topAnchor.constraint(equalTo: view.topAnchor, constant: 0),
@@ -210,7 +309,7 @@ final class CalendarViewController: UIViewController {
             collection_view.topAnchor.constraint(equalTo: weekdays_stack.bottomAnchor, constant: 6),
             collection_view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             collection_view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            collection_view.heightAnchor.constraint(equalToConstant: 240),
+            collectionViewHeightConstraint!,
             
             selected_date_label.topAnchor.constraint(equalTo: collection_view.bottomAnchor, constant: 16),
             selected_date_label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -244,6 +343,14 @@ final class CalendarViewController: UIViewController {
     private func reloadCalendar() {
         month_label.text = makeMonthTitle(from: currentDate)
         days = generateDays(for: currentDate)
+
+        let rowsCount = CGFloat(days.count / 7)
+        let rowHeight: CGFloat = 48
+        let lineSpacing: CGFloat = 4
+
+        collectionViewHeightConstraint?.constant =
+            rowsCount * rowHeight + max(0, rowsCount - 1) * lineSpacing
+
         collection_view.reloadData()
     }
 
@@ -313,7 +420,12 @@ final class CalendarViewController: UIViewController {
             events_table_view.isHidden = events.isEmpty
         }
     }
-
+    
+    func refreshEvents() {
+        reloadCalendar()
+        reloadEventsForSelectedDate()
+    }
+    
     private func makeSelectedDateTitle(from date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
@@ -377,7 +489,7 @@ extension CalendarViewController: UICollectionViewDelegateFlowLayout {
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
         let width = collectionView.bounds.width / 7
-        return CGSize(width: width, height: 40)
+        return CGSize(width: width, height: 48)
     }
 
     func collectionView(
@@ -411,28 +523,32 @@ extension CalendarViewController: UITableViewDataSource, UITableViewDelegate {
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
         let event = selectedDateEvents[indexPath.row]
-        let cell = tableView.dequeueReusableCell(withIdentifier: "event_cell", for: indexPath)
 
-        var content = cell.defaultContentConfiguration()
+        let cell = tableView.dequeueReusableCell(
+            withIdentifier: CalendarEventCell.reuseIdentifier,
+            for: indexPath
+        )
 
-        content.text = event.title
-
-        if event.isAllDay {
-            content.secondaryText = "Весь день • \(event.description)"
-        } else {
-            content.secondaryText = "\(event.time ?? "") • \(event.description)"
+        guard let eventCell = cell as? CalendarEventCell else {
+            return cell
         }
 
-        content.textProperties.color = .black
-        content.textProperties.font = .systemFont(ofSize: 17, weight: .semibold)
-        content.secondaryTextProperties.color = .systemGray
-        content.secondaryTextProperties.font = .systemFont(ofSize: 14, weight: .regular)
+        let subtitle: String
 
-        cell.backgroundColor = .white
-        cell.contentConfiguration = content
-        cell.selectionStyle = .none
+        if event.isAllDay {
+            subtitle = "Весь день • \(event.description)"
+        } else {
+            subtitle = "\(event.time ?? "") • \(event.description)"
+        }
 
-        return cell
+        eventCell.configure(
+            title: event.title,
+            subtitle: subtitle,
+            indexPath: indexPath,
+            rowsCount: selectedDateEvents.count
+        )
+
+        return eventCell
     }
 
     func tableView(

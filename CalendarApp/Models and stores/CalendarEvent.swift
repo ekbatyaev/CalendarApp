@@ -1,6 +1,6 @@
 import Foundation
 
-struct CalendarEvent: Identifiable, Codable {
+struct CalendarEvent: Codable, Identifiable, Equatable {
     let id: UUID
     let title: String
     let date: Date
@@ -22,5 +22,25 @@ struct CalendarEvent: Identifiable, Codable {
         self.time = time
         self.isAllDay = isAllDay
         self.description = description
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case date
+        case time
+        case isAllDay
+        case description
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.title = try container.decode(String.self, forKey: .title)
+        self.date = try container.decode(Date.self, forKey: .date)
+        self.time = try container.decodeIfPresent(String.self, forKey: .time)
+        self.isAllDay = try container.decode(Bool.self, forKey: .isAllDay)
+        self.description = try container.decode(String.self, forKey: .description)
     }
 }
