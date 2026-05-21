@@ -14,6 +14,9 @@ final class ViewController: UIViewController {
     private let calendarEventStore = CalendarEventStore()
 
     private var todayEvents: [CalendarEvent] = []
+    private var todayActiveEvents: [CalendarEvent] = []
+    private var todayCompletedEvents: [CalendarEvent] = []
+    private var completedTodayEventKeys: Set<String> = []
 
     private lazy var calendarViewController = CalendarViewController(
         eventStore: calendarEventStore
@@ -262,49 +265,94 @@ final class ViewController: UIViewController {
             let events = await self.calendarEventStore.events(for: Date())
 
             self.todayEvents = events
+            self.completedTodayEventKeys = Self.loadCompletedTodayEventKeys()
 
-            self.status_label.text = events.isEmpty
-                ? "На сегодня задач нет"
-                : "Задачи на сегодня: \(events.count)"
+            self.todayActiveEvents = events.filter {
+                !self.completedTodayEventKeys.contains(self.makeEventKey(for: $0))
+            }
 
-            self.empty_label.isHidden = !events.isEmpty
-            self.table_view.isHidden = events.isEmpty
+            self.todayCompletedEvents = events.filter {
+                self.completedTodayEventKeys.contains(self.makeEventKey(for: $0))
+            }
 
+            self.updateTodaySummary()
             self.table_view.reloadData()
         }
     }
 
-    private func deleteTodayEvent(at index: Int) {
-        guard todayEvents.indices.contains(index) else {
+    private func completeTodayEvent(at index: Int) {
+        guard todayActiveEvents.indices.contains(index) else {
             return
         }
 
-        let event = todayEvents[index]
-        let indexPath = IndexPath(row: index, section: 0)
+        let event = todayActiveEvents[index]
 
-        todayEvents.remove(at: index)
+        completedTodayEventKeys.insert(makeEventKey(for: event))
+        Self.saveCompletedTodayEventKeys(completedTodayEventKeys)
+
+        todayActiveEvents.remove(at: index)
+        todayCompletedEvents.append(event)
+
+        updateTodaySummary()
 
         table_view.performBatchUpdates {
-            table_view.deleteRows(at: [indexPath], with: .automatic)
-        } completion: { [weak self] _ in
-            guard let self else { return }
+            table_view.deleteRows(
+                at: [IndexPath(row: index, section: 0)],
+                with: .automatic
+            )
 
-            self.empty_label.isHidden = !self.todayEvents.isEmpty
-            self.table_view.isHidden = self.todayEvents.isEmpty
-
-            self.status_label.text = self.todayEvents.isEmpty
-                ? "На сегодня задач нет"
-                : "Задачи на сегодня: \(self.todayEvents.count)"
-
-            Task { [weak self] in
-                guard let self else { return }
-
-                await self.calendarEventStore.delete(event)
-
-                self.calendarViewController.refreshEvents()
-                self.taskViewController.refreshEvents()
+            if todayCompletedEvents.count == 1 {
+                table_view.insertSections(
+                    IndexSet(integer: 1),
+                    with: .automatic
+                )
+            } else {
+                table_view.insertRows(
+                    at: [IndexPath(row: todayCompletedEvents.count - 1, section: 1)],
+                    with: .automatic
+                )
             }
         }
+
+        calendarViewController.refreshEvents()
+        taskViewController.refreshEvents()
+    }
+
+    private func updateTodaySummary() {
+        let totalCount = todayActiveEvents.count + todayCompletedEvents.count
+
+        empty_label.isHidden = totalCount != 0
+        table_view.isHidden = totalCount == 0
+
+        if totalCount == 0 {
+            status_label.text = "На сегодня задач нет"
+        } else if todayCompletedEvents.isEmpty {
+            status_label.text = "Задачи на сегодня: \(todayActiveEvents.count)"
+        } else {
+            status_label.text = "Осталось: \(todayActiveEvents.count) • Выполнено: \(todayCompletedEvents.count)"
+        }
+    }
+
+    private func makeEventKey(for event: CalendarEvent) -> String {
+        return event.id.uuidString
+    }
+
+    private static func completedTodayStorageKey() -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.current
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        return "completedTodayEventKeys-\(formatter.string(from: Date()))"
+    }
+
+    private static func loadCompletedTodayEventKeys() -> Set<String> {
+        let values = UserDefaults.standard.stringArray(forKey: completedTodayStorageKey()) ?? []
+        return Set(values)
+    }
+
+    private static func saveCompletedTodayEventKeys(_ keys: Set<String>) {
+        UserDefaults.standard.set(Array(keys), forKey: completedTodayStorageKey())
     }
 
     // MARK: - Tabs
@@ -337,8 +385,7 @@ final class ViewController: UIViewController {
             title_label.isHidden = false
             status_label.isHidden = false
 
-            table_view.isHidden = todayEvents.isEmpty
-            empty_label.isHidden = !todayEvents.isEmpty
+            updateTodaySummary()
 
             calendar_container_view.isHidden = true
             tasks_container_view.isHidden = true
@@ -380,7 +427,7 @@ final class ViewController: UIViewController {
             UIView.animate(withDuration: 0.12) {
                 sender.transform = .identity
             } completion: { [weak self] _ in
-                self?.deleteTodayEvent(at: sender.tag)
+                self?.completeTodayEvent(at: sender.tag)
             }
         }
     }
@@ -390,18 +437,26 @@ final class ViewController: UIViewController {
 
 extension ViewController: UITableViewDataSource, UITableViewDelegate {
 
+    func numberOfSections(in tableView: UITableView) -> Int {
+        return todayCompletedEvents.isEmpty ? 1 : 2
+    }
+
     func tableView(
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        todayEvents.count
+        return section == 0 ? todayActiveEvents.count : todayCompletedEvents.count
     }
 
     func tableView(
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let event = todayEvents[indexPath.row]
+        let isCompletedSection = indexPath.section == 1
+
+        let event = isCompletedSection
+            ? todayCompletedEvents[indexPath.row]
+            : todayActiveEvents[indexPath.row]
 
         let cell = tableView.dequeueReusableCell(
             withIdentifier: TodayTaskCell.reuseIdentifier,
@@ -416,11 +471,30 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
             title: event.title,
             subtitle: makeSubtitle(for: event),
             index: indexPath.row,
-            target: self,
+            isCompleted: isCompletedSection,
+            target: isCompletedSection ? nil : self,
             action: #selector(doneButtonTapped(_:))
         )
 
         return todayCell
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        titleForHeaderInSection section: Int
+    ) -> String? {
+        return section == 1 ? "Выполнено сегодня" : nil
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        willDisplayHeaderView view: UIView,
+        forSection section: Int
+    ) {
+        guard let header = view as? UITableViewHeaderFooterView else { return }
+
+        header.textLabel?.textColor = .systemGray
+        header.textLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
     }
 
     private func makeSubtitle(for event: CalendarEvent) -> String {
@@ -489,8 +563,16 @@ final class TodayTaskCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
 
+        title_label.attributedText = nil
         title_label.text = nil
         subtitle_label.text = nil
+        subtitle_label.textColor = .systemGray
+
+        card_view.alpha = 1
+
+        done_button.isUserInteractionEnabled = true
+        done_button.setImage(UIImage(systemName: "circle"), for: .normal)
+        done_button.tintColor = .systemBlue
         done_button.removeTarget(nil, action: nil, for: .allEvents)
         done_button.tag = 0
     }
@@ -501,6 +583,7 @@ final class TodayTaskCell: UITableViewCell {
         selectionStyle = .none
 
         contentView.addSubview(card_view)
+
         card_view.addSubview(title_label)
         card_view.addSubview(subtitle_label)
         card_view.addSubview(done_button)
@@ -530,13 +613,42 @@ final class TodayTaskCell: UITableViewCell {
         title: String,
         subtitle: String,
         index: Int,
+        isCompleted: Bool,
         target: Any?,
         action: Selector
     ) {
-        title_label.text = title
         subtitle_label.text = subtitle
-
         done_button.tag = index
-        done_button.addTarget(target, action: action, for: .touchUpInside)
+
+        if isCompleted {
+            title_label.attributedText = NSAttributedString(
+                string: title,
+                attributes: [
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    .foregroundColor: UIColor.systemGray
+                ]
+            )
+
+            subtitle_label.textColor = .systemGray2
+
+            card_view.alpha = 0.55
+
+            done_button.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
+            done_button.tintColor = .systemGreen
+            done_button.isUserInteractionEnabled = false
+        } else {
+            title_label.attributedText = nil
+            title_label.text = title
+            title_label.textColor = .black
+
+            subtitle_label.textColor = .systemGray
+
+            card_view.alpha = 1
+
+            done_button.setImage(UIImage(systemName: "circle"), for: .normal)
+            done_button.tintColor = .systemBlue
+            done_button.isUserInteractionEnabled = true
+            done_button.addTarget(target, action: action, for: .touchUpInside)
+        }
     }
 }
