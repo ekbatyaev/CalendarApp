@@ -153,6 +153,10 @@ final class TaskViewController: UIViewController {
                 (
                     date: item.key,
                     events: item.value.sorted { first, second in
+                        if first.isCompleted != second.isCompleted {
+                            return !first.isCompleted && second.isCompleted
+                        }
+
                         if first.isAllDay != second.isAllDay {
                             return first.isAllDay && !second.isAllDay
                         }
@@ -227,10 +231,27 @@ extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
             title: event.title,
             subtitle: subtitle,
             indexPath: indexPath,
-            rowsCount: groupedEvents[indexPath.section].events.count
+            rowsCount: groupedEvents[indexPath.section].events.count,
+            isCompleted: event.isCompleted
         )
 
         return eventCell
+    }
+    
+    func tableView(
+        _ tableView: UITableView,
+        didSelectRowAt indexPath: IndexPath
+    ) {
+        let event = groupedEvents[indexPath.section].events[indexPath.row]
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            await self.eventStore.toggleCompleted(id: event.id)
+
+            self.reloadEvents()
+            self.onEventCreated?()
+        }
     }
 
     func tableView(

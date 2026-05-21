@@ -16,7 +16,6 @@ final class ViewController: UIViewController {
     private var todayEvents: [CalendarEvent] = []
     private var todayActiveEvents: [CalendarEvent] = []
     private var todayCompletedEvents: [CalendarEvent] = []
-    private var completedTodayEventKeys: Set<String> = []
 
     private lazy var calendarViewController = CalendarViewController(
         eventStore: calendarEventStore
@@ -201,6 +200,11 @@ final class ViewController: UIViewController {
             self?.reloadTodayEvents()
             self?.calendarViewController.refreshEvents()
         }
+        
+        calendarViewController.onEventUpdated = { [weak self] in
+            self?.reloadTodayEvents()
+            self?.taskViewController.refreshEvents()
+        }
 
         updateTabBarAppearance()
         updateScreenForSelectedTab()
@@ -265,14 +269,13 @@ final class ViewController: UIViewController {
             let events = await self.calendarEventStore.events(for: Date())
 
             self.todayEvents = events
-            self.completedTodayEventKeys = Self.loadCompletedTodayEventKeys()
 
             self.todayActiveEvents = events.filter {
-                !self.completedTodayEventKeys.contains(self.makeEventKey(for: $0))
+                !$0.isCompleted
             }
 
             self.todayCompletedEvents = events.filter {
-                self.completedTodayEventKeys.contains(self.makeEventKey(for: $0))
+                $0.isCompleted
             }
 
             self.updateTodaySummary()
@@ -280,43 +283,6 @@ final class ViewController: UIViewController {
         }
     }
 
-    private func completeTodayEvent(at index: Int) {
-        guard todayActiveEvents.indices.contains(index) else {
-            return
-        }
-
-        let event = todayActiveEvents[index]
-
-        completedTodayEventKeys.insert(makeEventKey(for: event))
-        Self.saveCompletedTodayEventKeys(completedTodayEventKeys)
-
-        todayActiveEvents.remove(at: index)
-        todayCompletedEvents.append(event)
-
-        updateTodaySummary()
-
-        table_view.performBatchUpdates {
-            table_view.deleteRows(
-                at: [IndexPath(row: index, section: 0)],
-                with: .automatic
-            )
-
-            if todayCompletedEvents.count == 1 {
-                table_view.insertSections(
-                    IndexSet(integer: 1),
-                    with: .automatic
-                )
-            } else {
-                table_view.insertRows(
-                    at: [IndexPath(row: todayCompletedEvents.count - 1, section: 1)],
-                    with: .automatic
-                )
-            }
-        }
-
-        calendarViewController.refreshEvents()
-        taskViewController.refreshEvents()
-    }
 
     private func updateTodaySummary() {
         let totalCount = todayActiveEvents.count + todayCompletedEvents.count
@@ -333,26 +299,22 @@ final class ViewController: UIViewController {
         }
     }
 
-    private func makeEventKey(for event: CalendarEvent) -> String {
-        return event.id.uuidString
-    }
+    private func completeTodayEvent(at index: Int) {
+        guard todayActiveEvents.indices.contains(index) else {
+            return
+        }
 
-    private static func completedTodayStorageKey() -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar.current
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "yyyy-MM-dd"
+        let event = todayActiveEvents[index]
 
-        return "completedTodayEventKeys-\(formatter.string(from: Date()))"
-    }
+        Task { [weak self] in
+            guard let self else { return }
 
-    private static func loadCompletedTodayEventKeys() -> Set<String> {
-        let values = UserDefaults.standard.stringArray(forKey: completedTodayStorageKey()) ?? []
-        return Set(values)
-    }
+            await self.calendarEventStore.setCompleted(id: event.id, isCompleted: true)
 
-    private static func saveCompletedTodayEventKeys(_ keys: Set<String>) {
-        UserDefaults.standard.set(Array(keys), forKey: completedTodayStorageKey())
+            self.reloadTodayEvents()
+            self.calendarViewController.refreshEvents()
+            self.taskViewController.refreshEvents()
+        }
     }
 
     // MARK: - Tabs
@@ -617,34 +579,21 @@ final class TodayTaskCell: UITableViewCell {
         target: Any?,
         action: Selector
     ) {
+        title_label.attributedText = nil
+        title_label.text = title
+        title_label.textColor = .black
+
         subtitle_label.text = subtitle
+        subtitle_label.textColor = .systemGray
+
         done_button.tag = index
+        card_view.alpha = isCompleted ? 0.45 : 1
 
         if isCompleted {
-            title_label.attributedText = NSAttributedString(
-                string: title,
-                attributes: [
-                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                    .foregroundColor: UIColor.systemGray
-                ]
-            )
-
-            subtitle_label.textColor = .systemGray2
-
-            card_view.alpha = 0.55
-
             done_button.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
             done_button.tintColor = .systemGreen
             done_button.isUserInteractionEnabled = false
         } else {
-            title_label.attributedText = nil
-            title_label.text = title
-            title_label.textColor = .black
-
-            subtitle_label.textColor = .systemGray
-
-            card_view.alpha = 1
-
             done_button.setImage(UIImage(systemName: "circle"), for: .normal)
             done_button.tintColor = .systemBlue
             done_button.isUserInteractionEnabled = true

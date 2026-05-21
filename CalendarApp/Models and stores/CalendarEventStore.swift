@@ -52,9 +52,63 @@ actor CalendarEventStore {
         events.removeAll()
         save()
     }
+    
+    func toggleCompleted(id: UUID) {
+        guard let index = events.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+
+        let event = events[index]
+
+        events[index] = CalendarEvent(
+            id: event.id,
+            title: event.title,
+            date: event.date,
+            time: event.time,
+            isAllDay: event.isAllDay,
+            description: event.description,
+            isCompleted: !event.isCompleted
+        )
+
+        sortEvents()
+        save()
+    }
+
+    func setCompleted(id: UUID, isCompleted: Bool) {
+        guard let index = events.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+
+        let event = events[index]
+
+        events[index] = CalendarEvent(
+            id: event.id,
+            title: event.title,
+            date: event.date,
+            time: event.time,
+            isAllDay: event.isAllDay,
+            description: event.description,
+            isCompleted: isCompleted
+        )
+
+        sortEvents()
+        save()
+    }
+    
 
     private func sortEvents() {
         events.sort { first, second in
+            let firstDay = Calendar.current.startOfDay(for: first.date)
+            let secondDay = Calendar.current.startOfDay(for: second.date)
+
+            if firstDay != secondDay {
+                return firstDay < secondDay
+            }
+
+            if first.isCompleted != second.isCompleted {
+                return !first.isCompleted && second.isCompleted
+            }
+
             if first.isAllDay != second.isAllDay {
                 return first.isAllDay && !second.isAllDay
             }
@@ -62,7 +116,7 @@ actor CalendarEventStore {
             return (first.time ?? "") < (second.time ?? "")
         }
     }
-
+    
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             events = []

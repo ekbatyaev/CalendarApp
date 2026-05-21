@@ -12,7 +12,8 @@ struct CalendarDay {
 final class CalendarEventCell: UITableViewCell {
 
     static let reuseIdentifier = "CalendarEventCell"
-
+        
+    
     private let card_view: UIView = {
         let view = UIView()
         view.backgroundColor = .white
@@ -63,6 +64,11 @@ final class CalendarEventCell: UITableViewCell {
         separator_view.isHidden = false
         card_view.layer.cornerRadius = 0
         card_view.layer.maskedCorners = []
+        
+        card_view.alpha = 1
+        title_label.attributedText = nil
+        title_label.textColor = .black
+        subtitle_label.textColor = .systemGray
     }
 
     private func configureUI() {
@@ -100,10 +106,17 @@ final class CalendarEventCell: UITableViewCell {
         title: String,
         subtitle: String,
         indexPath: IndexPath,
-        rowsCount: Int
+        rowsCount: Int,
+        isCompleted: Bool = false
     ) {
+        title_label.attributedText = nil
         title_label.text = title
         subtitle_label.text = subtitle
+
+        title_label.textColor = .black
+        subtitle_label.textColor = .systemGray
+
+        card_view.alpha = isCompleted ? 0.45 : 1
 
         let isFirst = indexPath.row == 0
         let isLast = indexPath.row == rowsCount - 1
@@ -142,6 +155,8 @@ final class CalendarEventCell: UITableViewCell {
 final class CalendarViewController: UIViewController {
 
     private let eventStore: CalendarEventStore
+    
+    var onEventUpdated: (() -> Void)?
     
     private var collectionViewHeightConstraint: NSLayoutConstraint?
 
@@ -413,13 +428,25 @@ final class CalendarViewController: UIViewController {
 
             let events = await eventStore.events(for: selectedDate)
 
-            selectedDateEvents = events
+            selectedDateEvents = events.sorted { first, second in
+                if first.isCompleted != second.isCompleted {
+                    return !first.isCompleted && second.isCompleted
+                }
+
+                if first.isAllDay != second.isAllDay {
+                    return first.isAllDay && !second.isAllDay
+                }
+
+                return (first.time ?? "") < (second.time ?? "")
+            }
+
             events_table_view.reloadData()
 
-            empty_events_label.isHidden = !events.isEmpty
-            events_table_view.isHidden = events.isEmpty
+            empty_events_label.isHidden = !selectedDateEvents.isEmpty
+            events_table_view.isHidden = selectedDateEvents.isEmpty
         }
     }
+    
     
     func refreshEvents() {
         reloadCalendar()
@@ -545,10 +572,28 @@ extension CalendarViewController: UITableViewDataSource, UITableViewDelegate {
             title: event.title,
             subtitle: subtitle,
             indexPath: indexPath,
-            rowsCount: selectedDateEvents.count
+            rowsCount: selectedDateEvents.count,
+            isCompleted: event.isCompleted
         )
 
         return eventCell
+    }
+    
+    func tableView(
+        _ tableView: UITableView,
+        didSelectRowAt indexPath: IndexPath
+    ) {
+        let event = selectedDateEvents[indexPath.row]
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            await self.eventStore.toggleCompleted(id: event.id)
+
+            self.reloadEventsForSelectedDate()
+
+            self.onEventUpdated?()
+        }
     }
 
     func tableView(
@@ -605,6 +650,8 @@ final class CalendarDayCell: UICollectionViewCell {
         day_label.font = .systemFont(ofSize: 17, weight: .medium)
         circle_view.isHidden = true
         circle_view.backgroundColor = .systemBlue
+        
+        
     }
 
     private func configureUI() {

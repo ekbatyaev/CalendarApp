@@ -7,6 +7,7 @@ struct CalendarEvent: Codable, Identifiable, Equatable {
     let time: String?
     let isAllDay: Bool
     let description: String
+    let isCompleted: Bool
 
     init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ struct CalendarEvent: Codable, Identifiable, Equatable {
         date: Date,
         time: String?,
         isAllDay: Bool,
-        description: String
+        description: String,
+        isCompleted: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -22,6 +24,7 @@ struct CalendarEvent: Codable, Identifiable, Equatable {
         self.time = time
         self.isAllDay = isAllDay
         self.description = description
+        self.isCompleted = isCompleted
     }
 
     enum CodingKeys: String, CodingKey {
@@ -31,6 +34,7 @@ struct CalendarEvent: Codable, Identifiable, Equatable {
         case time
         case isAllDay
         case description
+        case isCompleted
     }
 
     init(from decoder: Decoder) throws {
@@ -42,5 +46,6 @@ struct CalendarEvent: Codable, Identifiable, Equatable {
         self.time = try container.decodeIfPresent(String.self, forKey: .time)
         self.isAllDay = try container.decode(Bool.self, forKey: .isAllDay)
         self.description = try container.decode(String.self, forKey: .description)
+        self.isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
     }
 }
