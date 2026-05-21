@@ -23,6 +23,17 @@ actor CalendarEventStore {
         save()
     }
     
+
+    func update(_ event: CalendarEvent) {
+        guard let index = events.firstIndex(where: { $0.id == event.id }) else {
+            return
+        }
+
+        events[index] = event
+        sortEvents()
+        save()
+    }
+
     func delete(_ event: CalendarEvent) {
         delete(id: event.id)
     }

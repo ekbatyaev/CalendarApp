@@ -4,11 +4,14 @@ import UIKit
 final class CreateTaskViewController: UIViewController {
 
     private let eventStore: CalendarEventStore
+    private let editingEvent: CalendarEvent?
     
     var onEventCreated: (() -> Void)?
+    var onEventSaved: (() -> Void)?
 
-    init(eventStore: CalendarEventStore) {
+    init(eventStore: CalendarEventStore, editingEvent: CalendarEvent? = nil) {
         self.eventStore = eventStore
+        self.editingEvent = editingEvent
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -78,11 +81,12 @@ final class CreateTaskViewController: UIViewController {
         super.viewDidLoad()
 
         configureUI()
+        configureForEditingIfNeeded()
     }
 
     private func configureUI() {
         view.backgroundColor = .systemGroupedBackground
-        title = "Новая задача"
+        title = editingEvent == nil ? "Новая задача" : "Редактировать задачу"
 
         description_text_view.delegate = self
 
@@ -130,6 +134,25 @@ final class CreateTaskViewController: UIViewController {
         ])
     }
 
+    private func configureForEditingIfNeeded() {
+        guard let event = editingEvent else { return }
+
+        title_text_field.text = event.title
+
+        if event.description.isEmpty {
+            description_text_view.text = "Описание"
+            description_text_view.textColor = .systemGray
+        } else {
+            description_text_view.text = event.description
+            description_text_view.textColor = .black
+        }
+
+        all_day_switch.isOn = event.isAllDay
+        date_picker.date = event.date
+        date_picker.datePickerMode = event.isAllDay ? .date : .dateAndTime
+        save_button.setTitle("Сохранить изменения", for: .normal)
+    }
+
     @objc private func save_button_tapped() {
         let title = title_text_field.text ?? ""
 
@@ -152,19 +175,26 @@ final class CreateTaskViewController: UIViewController {
         let isAllDay = all_day_switch.isOn
 
         let event = CalendarEvent(
+            id: editingEvent?.id ?? UUID(),
             title: title,
             date: date_picker.date,
             time: isAllDay ? nil : formatter.string(from: date_picker.date),
             isAllDay: isAllDay,
-            description: description
+            description: description,
+            isCompleted: editingEvent?.isCompleted ?? false
         )
 
         Task { [weak self] in
             guard let self else { return }
 
-            await eventStore.add(event)
+            if self.editingEvent == nil {
+                await self.eventStore.add(event)
+                self.onEventCreated?()
+            } else {
+                await self.eventStore.update(event)
+                self.onEventSaved?()
+            }
 
-            self.onEventCreated?()
             self.dismiss(animated: true)
         }
         

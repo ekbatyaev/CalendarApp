@@ -12,6 +12,8 @@ struct CalendarDay {
 final class CalendarEventCell: UITableViewCell {
 
     static let reuseIdentifier = "CalendarEventCell"
+
+    var onDoneTapped: (() -> Void)?
         
     
     private let card_view: UIView = {
@@ -46,6 +48,14 @@ final class CalendarEventCell: UITableViewCell {
         return view
     }()
 
+    private let done_button: UIButton = {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "circle"), for: .normal)
+        button.tintColor = .systemBlue
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
 
@@ -69,6 +79,12 @@ final class CalendarEventCell: UITableViewCell {
         title_label.attributedText = nil
         title_label.textColor = .black
         subtitle_label.textColor = .systemGray
+        onDoneTapped = nil
+        done_button.removeTarget(nil, action: nil, for: .allEvents)
+        done_button.addTarget(self, action: #selector(done_button_tapped), for: .touchUpInside)
+        done_button.isUserInteractionEnabled = true
+        done_button.setImage(UIImage(systemName: "circle"), for: .normal)
+        done_button.tintColor = .systemBlue
     }
 
     private func configureUI() {
@@ -79,7 +95,10 @@ final class CalendarEventCell: UITableViewCell {
         contentView.addSubview(card_view)
         card_view.addSubview(title_label)
         card_view.addSubview(subtitle_label)
+        card_view.addSubview(done_button)
         card_view.addSubview(separator_view)
+
+        done_button.addTarget(self, action: #selector(done_button_tapped), for: .touchUpInside)
 
         NSLayoutConstraint.activate([
             card_view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -87,8 +106,13 @@ final class CalendarEventCell: UITableViewCell {
             card_view.topAnchor.constraint(equalTo: contentView.topAnchor),
             card_view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
+            done_button.trailingAnchor.constraint(equalTo: card_view.trailingAnchor, constant: -16),
+            done_button.centerYAnchor.constraint(equalTo: card_view.centerYAnchor),
+            done_button.widthAnchor.constraint(equalToConstant: 34),
+            done_button.heightAnchor.constraint(equalToConstant: 34),
+
             title_label.leadingAnchor.constraint(equalTo: card_view.leadingAnchor, constant: 16),
-            title_label.trailingAnchor.constraint(equalTo: card_view.trailingAnchor, constant: -16),
+            title_label.trailingAnchor.constraint(equalTo: done_button.leadingAnchor, constant: -12),
             title_label.topAnchor.constraint(equalTo: card_view.topAnchor, constant: 12),
 
             subtitle_label.leadingAnchor.constraint(equalTo: title_label.leadingAnchor),
@@ -117,6 +141,16 @@ final class CalendarEventCell: UITableViewCell {
         subtitle_label.textColor = .systemGray
 
         card_view.alpha = isCompleted ? 0.45 : 1
+
+        if isCompleted {
+            done_button.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
+            done_button.tintColor = .systemGreen
+            done_button.isUserInteractionEnabled = false
+        } else {
+            done_button.setImage(UIImage(systemName: "circle"), for: .normal)
+            done_button.tintColor = .systemBlue
+            done_button.isUserInteractionEnabled = true
+        }
 
         let isFirst = indexPath.row == 0
         let isLast = indexPath.row == rowsCount - 1
@@ -148,6 +182,10 @@ final class CalendarEventCell: UITableViewCell {
             card_view.layer.maskedCorners = []
             separator_view.isHidden = false
         }
+    }
+
+    @objc private func done_button_tapped() {
+        onDoneTapped?()
     }
 }
 
@@ -448,6 +486,32 @@ final class CalendarViewController: UIViewController {
     }
     
     
+    private func openEditTask(_ event: CalendarEvent) {
+        let editVC = CreateTaskViewController(eventStore: eventStore, editingEvent: event)
+
+        editVC.onEventSaved = { [weak self] in
+            self?.reloadEventsForSelectedDate()
+            self?.reloadCalendar()
+            self?.onEventUpdated?()
+        }
+
+        let navigationController = UINavigationController(rootViewController: editVC)
+
+        present(navigationController, animated: true)
+    }
+
+    private func completeTask(_ event: CalendarEvent) {
+        Task { [weak self] in
+            guard let self else { return }
+
+            await self.eventStore.setCompleted(id: event.id, isCompleted: true)
+
+            self.reloadEventsForSelectedDate()
+            self.reloadCalendar()
+            self.onEventUpdated?()
+        }
+    }
+
     func refreshEvents() {
         reloadCalendar()
         reloadEventsForSelectedDate()
@@ -576,6 +640,10 @@ extension CalendarViewController: UITableViewDataSource, UITableViewDelegate {
             isCompleted: event.isCompleted
         )
 
+        eventCell.onDoneTapped = { [weak self] in
+            self?.completeTask(event)
+        }
+
         return eventCell
     }
     
@@ -583,17 +651,10 @@ extension CalendarViewController: UITableViewDataSource, UITableViewDelegate {
         _ tableView: UITableView,
         didSelectRowAt indexPath: IndexPath
     ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+
         let event = selectedDateEvents[indexPath.row]
-
-        Task { [weak self] in
-            guard let self else { return }
-
-            await self.eventStore.toggleCompleted(id: event.id)
-
-            self.reloadEventsForSelectedDate()
-
-            self.onEventUpdated?()
-        }
+        openEditTask(event)
     }
 
     func tableView(

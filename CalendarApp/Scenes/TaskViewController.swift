@@ -189,6 +189,30 @@ final class TaskViewController: UIViewController {
 
         present(navigationController, animated: true)
     }
+
+    private func openEditTask(_ event: CalendarEvent) {
+        let editVC = CreateTaskViewController(eventStore: eventStore, editingEvent: event)
+
+        editVC.onEventSaved = { [weak self] in
+            self?.reloadEvents()
+            self?.onEventCreated?()
+        }
+
+        let navigationController = UINavigationController(rootViewController: editVC)
+
+        present(navigationController, animated: true)
+    }
+
+    private func completeTask(_ event: CalendarEvent) {
+        Task { [weak self] in
+            guard let self else { return }
+
+            await self.eventStore.setCompleted(id: event.id, isCompleted: true)
+
+            self.reloadEvents()
+            self.onEventCreated?()
+        }
+    }
 }
 
 extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
@@ -235,6 +259,10 @@ extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
             isCompleted: event.isCompleted
         )
 
+        eventCell.onDoneTapped = { [weak self] in
+            self?.completeTask(event)
+        }
+
         return eventCell
     }
     
@@ -242,16 +270,10 @@ extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
         _ tableView: UITableView,
         didSelectRowAt indexPath: IndexPath
     ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+
         let event = groupedEvents[indexPath.section].events[indexPath.row]
-
-        Task { [weak self] in
-            guard let self else { return }
-
-            await self.eventStore.toggleCompleted(id: event.id)
-
-            self.reloadEvents()
-            self.onEventCreated?()
-        }
+        openEditTask(event)
     }
 
     func tableView(

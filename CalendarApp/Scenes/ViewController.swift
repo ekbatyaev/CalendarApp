@@ -317,6 +317,20 @@ final class ViewController: UIViewController {
         }
     }
 
+    private func openEditTask(_ event: CalendarEvent) {
+        let editVC = CreateTaskViewController(eventStore: calendarEventStore, editingEvent: event)
+
+        editVC.onEventSaved = { [weak self] in
+            self?.reloadTodayEvents()
+            self?.calendarViewController.refreshEvents()
+            self?.taskViewController.refreshEvents()
+        }
+
+        let navigationController = UINavigationController(rootViewController: editVC)
+
+        present(navigationController, animated: true)
+    }
+
     // MARK: - Tabs
 
     @objc private func tabButtonTapped(_ sender: UIButton) {
@@ -439,6 +453,19 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
         )
 
         return todayCell
+    }
+
+    func tableView(
+        _ tableView: UITableView,
+        didSelectRowAt indexPath: IndexPath
+    ) {
+        tableView.deselectRow(at: indexPath, animated: true)
+
+        let event = indexPath.section == 1
+            ? todayCompletedEvents[indexPath.row]
+            : todayActiveEvents[indexPath.row]
+
+        openEditTask(event)
     }
 
     func tableView(
