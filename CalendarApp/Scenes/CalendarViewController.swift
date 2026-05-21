@@ -18,7 +18,7 @@ final class CalendarEventCell: UITableViewCell {
     
     private let card_view: UIView = {
         let view = UIView()
-        view.backgroundColor = .white
+        view.backgroundColor = AppStyle.cardBackground
         view.translatesAutoresizingMaskIntoConstraints = false
         view.clipsToBounds = true
         return view
@@ -26,7 +26,7 @@ final class CalendarEventCell: UITableViewCell {
 
     private let title_label: UILabel = {
         let label = UILabel()
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 17, weight: .semibold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -34,7 +34,7 @@ final class CalendarEventCell: UITableViewCell {
 
     private let subtitle_label: UILabel = {
         let label = UILabel()
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.font = .systemFont(ofSize: 14, weight: .regular)
         label.numberOfLines = 2
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -43,7 +43,7 @@ final class CalendarEventCell: UITableViewCell {
 
     private let separator_view: UIView = {
         let view = UIView()
-        view.backgroundColor = .systemGray5
+        view.backgroundColor = AppStyle.separator
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -51,7 +51,7 @@ final class CalendarEventCell: UITableViewCell {
     private let done_button: UIButton = {
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "circle"), for: .normal)
-        button.tintColor = .systemBlue
+        button.tintColor = AppStyle.primary
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -74,17 +74,20 @@ final class CalendarEventCell: UITableViewCell {
         separator_view.isHidden = false
         card_view.layer.cornerRadius = 0
         card_view.layer.maskedCorners = []
-        
+
         card_view.alpha = 1
         title_label.attributedText = nil
-        title_label.textColor = .black
-        subtitle_label.textColor = .systemGray
+        title_label.textColor = AppStyle.textPrimary
+        subtitle_label.textColor = AppStyle.textSecondary
+
         onDoneTapped = nil
+
         done_button.removeTarget(nil, action: nil, for: .allEvents)
         done_button.addTarget(self, action: #selector(done_button_tapped), for: .touchUpInside)
+
         done_button.isUserInteractionEnabled = true
         done_button.setImage(UIImage(systemName: "circle"), for: .normal)
-        done_button.tintColor = .systemBlue
+        done_button.tintColor = AppStyle.accent
     }
 
     private func configureUI() {
@@ -137,25 +140,25 @@ final class CalendarEventCell: UITableViewCell {
         title_label.text = title
         subtitle_label.text = subtitle
 
-        title_label.textColor = .black
-        subtitle_label.textColor = .systemGray
+        title_label.textColor = AppStyle.textPrimary
+        subtitle_label.textColor = AppStyle.textSecondary
 
         card_view.alpha = isCompleted ? 0.45 : 1
 
         if isCompleted {
             done_button.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
-            done_button.tintColor = .systemGreen
-            done_button.isUserInteractionEnabled = false
+            done_button.tintColor = AppStyle.success
+            done_button.isUserInteractionEnabled = true
         } else {
             done_button.setImage(UIImage(systemName: "circle"), for: .normal)
-            done_button.tintColor = .systemBlue
+            done_button.tintColor = AppStyle.accent
             done_button.isUserInteractionEnabled = true
         }
 
         let isFirst = indexPath.row == 0
         let isLast = indexPath.row == rowsCount - 1
 
-        card_view.layer.cornerRadius = 16
+        card_view.layer.cornerRadius = AppStyle.cardCornerRadius
 
         if rowsCount == 1 {
             card_view.layer.maskedCorners = [
@@ -224,7 +227,7 @@ final class CalendarViewController: UIViewController {
 
     private lazy var month_label: UILabel = {
         let label = UILabel()
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 26, weight: .bold)
         label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -234,7 +237,7 @@ final class CalendarViewController: UIViewController {
     private lazy var previous_month_button: UIButton = {
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "chevron.left"), for: .normal)
-        button.tintColor = .systemBlue
+        button.tintColor = AppStyle.primary
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(previous_month_button_tapped), for: .touchUpInside)
         return button
@@ -243,7 +246,7 @@ final class CalendarViewController: UIViewController {
     private lazy var next_month_button: UIButton = {
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "chevron.right"), for: .normal)
-        button.tintColor = .systemBlue
+        button.tintColor = AppStyle.primary
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(next_month_button_tapped), for: .touchUpInside)
         return button
@@ -274,7 +277,7 @@ final class CalendarViewController: UIViewController {
     
     private lazy var selected_date_label: UILabel = {
         let label = UILabel()
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 20, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -297,7 +300,7 @@ final class CalendarViewController: UIViewController {
     private lazy var empty_events_label: UILabel = {
         let label = UILabel()
         label.text = "На этот день пока нет дел"
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.textAlignment = .center
         label.font = .systemFont(ofSize: 16, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -327,7 +330,7 @@ final class CalendarViewController: UIViewController {
     // MARK: - Methods
 
     private func configureUI() {
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = AppStyle.background
 
         view.addSubview(month_label)
         view.addSubview(previous_month_button)
@@ -386,7 +389,7 @@ final class CalendarViewController: UIViewController {
         weekdays.forEach { weekday in
             let label = UILabel()
             label.text = weekday
-            label.textColor = .systemGray
+            label.textColor = AppStyle.textSecondary
             label.textAlignment = .center
             label.font = .systemFont(ofSize: 14, weight: .semibold)
             weekdays_stack.addArrangedSubview(label)
@@ -500,11 +503,14 @@ final class CalendarViewController: UIViewController {
         present(navigationController, animated: true)
     }
 
-    private func completeTask(_ event: CalendarEvent) {
+    private func toggleTaskCompletion(_ event: CalendarEvent) {
         Task { [weak self] in
             guard let self else { return }
 
-            await self.eventStore.setCompleted(id: event.id, isCompleted: true)
+            await self.eventStore.setCompleted(
+                id: event.id,
+                isCompleted: !event.isCompleted
+            )
 
             self.reloadEventsForSelectedDate()
             self.reloadCalendar()
@@ -641,7 +647,7 @@ extension CalendarViewController: UITableViewDataSource, UITableViewDelegate {
         )
 
         eventCell.onDoneTapped = { [weak self] in
-            self?.completeTask(event)
+            self?.toggleTaskCompletion(event)
         }
 
         return eventCell
@@ -672,7 +678,7 @@ final class CalendarDayCell: UICollectionViewCell {
 
     private lazy var circle_view: UIView = {
         let view = UIView()
-        view.backgroundColor = .systemBlue
+        view.backgroundColor = AppStyle.primary
         view.isHidden = true
         view.layer.masksToBounds = true
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -707,10 +713,10 @@ final class CalendarDayCell: UICollectionViewCell {
         super.prepareForReuse()
 
         day_label.text = nil
-        day_label.textColor = .black
+        day_label.textColor = AppStyle.textPrimary
         day_label.font = .systemFont(ofSize: 17, weight: .medium)
         circle_view.isHidden = true
-        circle_view.backgroundColor = .systemBlue
+        circle_view.backgroundColor = AppStyle.primary
         
         
     }
@@ -737,24 +743,24 @@ final class CalendarDayCell: UICollectionViewCell {
 
         if day.isSelected {
             circle_view.isHidden = false
-            circle_view.backgroundColor = .systemBlue
+            circle_view.backgroundColor = AppStyle.primary
             day_label.textColor = .white
             day_label.font = .systemFont(ofSize: 17, weight: .bold)
 
         } else if day.isToday {
             circle_view.isHidden = false
-            circle_view.backgroundColor = .systemGray4
-            day_label.textColor = .systemBlue
+            circle_view.backgroundColor = AppStyle.primarySoft
+            day_label.textColor = AppStyle.primary
             day_label.font = .systemFont(ofSize: 17, weight: .bold)
 
         } else if day.isCurrentMonth {
             circle_view.isHidden = true
-            day_label.textColor = .black
+            day_label.textColor = AppStyle.textPrimary
             day_label.font = .systemFont(ofSize: 17, weight: .medium)
 
         } else {
             circle_view.isHidden = true
-            day_label.textColor = .systemGray3
+            day_label.textColor = AppStyle.textSecondary
             day_label.font = .systemFont(ofSize: 17, weight: .regular)
         }
     }

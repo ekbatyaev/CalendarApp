@@ -28,7 +28,7 @@ final class TaskViewController: UIViewController {
     private lazy var title_label: UILabel = {
         let label = UILabel()
         label.text = "Задачи"
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 30, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -51,10 +51,11 @@ final class TaskViewController: UIViewController {
     private lazy var create_task_button: UIButton = {
         let button = UIButton(type: .system)
         button.setTitle("Создать задачу", for: .normal)
-        button.backgroundColor = .systemBlue
+        button.backgroundColor = AppStyle.primary
         button.setTitleColor(.white, for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
-        button.layer.cornerRadius = 22
+        button.layer.cornerRadius = AppStyle.controlCornerRadius
+        button.layer.cornerCurve = .continuous
         button.layer.shadowColor = UIColor.black.cgColor
         button.layer.shadowOpacity = 0.16
         button.layer.shadowOffset = CGSize(width: 0, height: 8)
@@ -67,7 +68,7 @@ final class TaskViewController: UIViewController {
     private lazy var empty_label: UILabel = {
         let label = UILabel()
         label.text = "Пока нет задач"
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.textAlignment = .center
         label.font = .systemFont(ofSize: 17, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -88,7 +89,7 @@ final class TaskViewController: UIViewController {
     }
 
     private func configureUI() {
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = AppStyle.background
 
         view.addSubview(title_label)
         view.addSubview(table_view)
@@ -203,11 +204,14 @@ final class TaskViewController: UIViewController {
         present(navigationController, animated: true)
     }
 
-    private func completeTask(_ event: CalendarEvent) {
+    private func toggleTaskCompletion(_ event: CalendarEvent) {
         Task { [weak self] in
             guard let self else { return }
 
-            await self.eventStore.setCompleted(id: event.id, isCompleted: true)
+            await self.eventStore.setCompleted(
+                id: event.id,
+                isCompleted: !event.isCompleted
+            )
 
             self.reloadEvents()
             self.onEventCreated?()
@@ -260,7 +264,7 @@ extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
         )
 
         eventCell.onDoneTapped = { [weak self] in
-            self?.completeTask(event)
+            self?.toggleTaskCompletion(event)
         }
 
         return eventCell
@@ -299,7 +303,7 @@ extension TaskViewController: UITableViewDataSource, UITableViewDelegate {
 
         let label = UILabel()
         label.text = makeSectionTitle(from: groupedEvents[section].date)
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 21, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
 

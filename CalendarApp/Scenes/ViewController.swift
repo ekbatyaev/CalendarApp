@@ -32,7 +32,7 @@ final class ViewController: UIViewController {
     private lazy var title_label: UILabel = {
         let label = UILabel()
         label.text = "Сегодня"
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 32, weight: .bold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -41,7 +41,7 @@ final class ViewController: UIViewController {
     private lazy var status_label: UILabel = {
         let label = UILabel()
         label.text = "Задачи на сегодня"
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.textAlignment = .left
         label.font = .systemFont(ofSize: 17, weight: .medium)
         label.numberOfLines = 0
@@ -67,7 +67,7 @@ final class ViewController: UIViewController {
     private lazy var empty_label: UILabel = {
         let label = UILabel()
         label.text = "На сегодня задач нет"
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.textAlignment = .center
         label.font = .systemFont(ofSize: 17, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -92,12 +92,7 @@ final class ViewController: UIViewController {
 
     private lazy var customTabBar: UIView = {
         let view = UIView()
-        view.backgroundColor = .white
-        view.layer.cornerRadius = 28
-        view.layer.shadowColor = UIColor.black.cgColor
-        view.layer.shadowOpacity = 0.12
-        view.layer.shadowOffset = CGSize(width: 0, height: 8)
-        view.layer.shadowRadius = 20
+        view.applyCardStyle(cornerRadius: 28)
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -132,7 +127,7 @@ final class ViewController: UIViewController {
     // MARK: - Configuration
 
     private func configureUI() {
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = AppStyle.background
 
         view.addSubview(title_label)
         view.addSubview(status_label)
@@ -218,7 +213,7 @@ final class ViewController: UIViewController {
         configuration.image = UIImage(systemName: imageName)
         configuration.imagePlacement = .top
         configuration.imagePadding = 4
-        configuration.baseForegroundColor = .systemGray
+        configuration.baseForegroundColor = AppStyle.textSecondary
 
         button.configuration = configuration
         button.tag = tag
@@ -299,17 +294,14 @@ final class ViewController: UIViewController {
         }
     }
 
-    private func completeTodayEvent(at index: Int) {
-        guard todayActiveEvents.indices.contains(index) else {
-            return
-        }
-
-        let event = todayActiveEvents[index]
-
+    private func toggleTodayEvent(_ event: CalendarEvent) {
         Task { [weak self] in
             guard let self else { return }
 
-            await self.calendarEventStore.setCompleted(id: event.id, isCompleted: true)
+            await self.calendarEventStore.setCompleted(
+                id: event.id,
+                isCompleted: !event.isCompleted
+            )
 
             self.reloadTodayEvents()
             self.calendarViewController.refreshEvents()
@@ -347,7 +339,7 @@ final class ViewController: UIViewController {
         for button in buttons {
             let isSelected = button.tag == selectedTab.rawValue
 
-            button.configuration?.baseForegroundColor = isSelected ? .systemBlue : .systemGray
+            button.configuration?.baseForegroundColor = isSelected ? AppStyle.primary : AppStyle.textSecondary
             button.titleLabel?.font = .systemFont(
                 ofSize: 13,
                 weight: isSelected ? .semibold : .regular
@@ -393,9 +385,15 @@ final class ViewController: UIViewController {
     }
 
     @objc private func doneButtonTapped(_ sender: UIButton) {
-        sender.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
-        sender.tintColor = .systemGreen
-        sender.isUserInteractionEnabled = false
+        let point = sender.convert(CGPoint.zero, to: table_view)
+
+        guard let indexPath = table_view.indexPathForRow(at: point) else {
+            return
+        }
+
+        let event = indexPath.section == 1
+            ? todayCompletedEvents[indexPath.row]
+            : todayActiveEvents[indexPath.row]
 
         UIView.animate(withDuration: 0.15) {
             sender.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
@@ -403,7 +401,7 @@ final class ViewController: UIViewController {
             UIView.animate(withDuration: 0.12) {
                 sender.transform = .identity
             } completion: { [weak self] _ in
-                self?.completeTodayEvent(at: sender.tag)
+                self?.toggleTodayEvent(event)
             }
         }
     }
@@ -448,7 +446,7 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
             subtitle: makeSubtitle(for: event),
             index: indexPath.row,
             isCompleted: isCompletedSection,
-            target: isCompletedSection ? nil : self,
+            target: self,
             action: #selector(doneButtonTapped(_:))
         )
 
@@ -482,7 +480,7 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
     ) {
         guard let header = view as? UITableViewHeaderFooterView else { return }
 
-        header.textLabel?.textColor = .systemGray
+        header.textLabel?.textColor = AppStyle.textSecondary
         header.textLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
     }
 
@@ -507,8 +505,7 @@ final class TodayTaskCell: UITableViewCell {
 
     private let card_view: UIView = {
         let view = UIView()
-        view.backgroundColor = .white
-        view.layer.cornerRadius = 18
+        view.applyCardStyle(cornerRadius: 18)
         view.layer.masksToBounds = true
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
@@ -516,7 +513,7 @@ final class TodayTaskCell: UITableViewCell {
 
     private let title_label: UILabel = {
         let label = UILabel()
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 17, weight: .semibold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -524,7 +521,7 @@ final class TodayTaskCell: UITableViewCell {
 
     private let subtitle_label: UILabel = {
         let label = UILabel()
-        label.textColor = .systemGray
+        label.textColor = AppStyle.textSecondary
         label.font = .systemFont(ofSize: 14, weight: .regular)
         label.numberOfLines = 1
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -534,7 +531,7 @@ final class TodayTaskCell: UITableViewCell {
     private let done_button: UIButton = {
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "circle"), for: .normal)
-        button.tintColor = .systemBlue
+        button.tintColor = AppStyle.primary
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -555,13 +552,13 @@ final class TodayTaskCell: UITableViewCell {
         title_label.attributedText = nil
         title_label.text = nil
         subtitle_label.text = nil
-        subtitle_label.textColor = .systemGray
+        subtitle_label.textColor = AppStyle.textSecondary
 
         card_view.alpha = 1
 
         done_button.isUserInteractionEnabled = true
         done_button.setImage(UIImage(systemName: "circle"), for: .normal)
-        done_button.tintColor = .systemBlue
+        done_button.tintColor = AppStyle.accent
         done_button.removeTarget(nil, action: nil, for: .allEvents)
         done_button.tag = 0
     }
@@ -608,23 +605,25 @@ final class TodayTaskCell: UITableViewCell {
     ) {
         title_label.attributedText = nil
         title_label.text = title
-        title_label.textColor = .black
+        title_label.textColor = AppStyle.textPrimary
 
         subtitle_label.text = subtitle
-        subtitle_label.textColor = .systemGray
+        subtitle_label.textColor = AppStyle.textSecondary
 
         done_button.tag = index
-        card_view.alpha = isCompleted ? 0.45 : 1
+
+        done_button.removeTarget(nil, action: nil, for: .allEvents)
+        done_button.addTarget(target, action: action, for: .touchUpInside)
+        done_button.isUserInteractionEnabled = true
 
         if isCompleted {
             done_button.setImage(UIImage(systemName: "checkmark.circle.fill"), for: .normal)
-            done_button.tintColor = .systemGreen
-            done_button.isUserInteractionEnabled = false
+            done_button.tintColor = AppStyle.success
+            card_view.alpha = 0.65
         } else {
             done_button.setImage(UIImage(systemName: "circle"), for: .normal)
-            done_button.tintColor = .systemBlue
-            done_button.isUserInteractionEnabled = true
-            done_button.addTarget(target, action: action, for: .touchUpInside)
+            done_button.tintColor = AppStyle.accent
+            card_view.alpha = 1
         }
     }
 }

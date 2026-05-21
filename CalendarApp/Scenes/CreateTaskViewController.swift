@@ -22,8 +22,7 @@ final class CreateTaskViewController: UIViewController {
     private let title_text_field: UITextField = {
         let field = UITextField()
         field.placeholder = "Название задачи"
-        field.backgroundColor = .white
-        field.layer.cornerRadius = 14
+        field.applyInputStyle()
         field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 1))
         field.leftViewMode = .always
         field.translatesAutoresizingMaskIntoConstraints = false
@@ -32,11 +31,9 @@ final class CreateTaskViewController: UIViewController {
 
     private let description_text_view: UITextView = {
         let textView = UITextView()
-        textView.backgroundColor = .white
-        textView.layer.cornerRadius = 14
-        textView.font = .systemFont(ofSize: 16)
+        textView.applyInputStyle()
         textView.text = "Описание"
-        textView.textColor = .systemGray
+        textView.textColor = AppStyle.textSecondary
         textView.translatesAutoresizingMaskIntoConstraints = false
         return textView
     }()
@@ -51,7 +48,7 @@ final class CreateTaskViewController: UIViewController {
     private let all_day_label: UILabel = {
         let label = UILabel()
         label.text = "Весь день"
-        label.textColor = .black
+        label.textColor = AppStyle.textPrimary
         label.font = .systemFont(ofSize: 17, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
@@ -69,10 +66,7 @@ final class CreateTaskViewController: UIViewController {
     private let save_button: UIButton = {
         let button = UIButton(type: .system)
         button.setTitle("Сохранить задачу", for: .normal)
-        button.backgroundColor = .systemBlue
-        button.setTitleColor(.white, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
-        button.layer.cornerRadius = 18
+        button.applyPrimaryButtonStyle()
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -85,7 +79,7 @@ final class CreateTaskViewController: UIViewController {
     }
 
     private func configureUI() {
-        view.backgroundColor = .systemGroupedBackground
+        view.backgroundColor = AppStyle.background
         title = editingEvent == nil ? "Новая задача" : "Редактировать задачу"
 
         description_text_view.delegate = self
@@ -141,10 +135,10 @@ final class CreateTaskViewController: UIViewController {
 
         if event.description.isEmpty {
             description_text_view.text = "Описание"
-            description_text_view.textColor = .systemGray
+            description_text_view.textColor = AppStyle.textSecondary
         } else {
             description_text_view.text = event.description
-            description_text_view.textColor = .black
+            description_text_view.textColor = AppStyle.textPrimary
         }
 
         all_day_switch.isOn = event.isAllDay
@@ -162,7 +156,7 @@ final class CreateTaskViewController: UIViewController {
 
         let description: String
 
-        if description_text_view.textColor == .systemGray {
+        if description_text_view.textColor == AppStyle.textSecondary {
             description = ""
         } else {
             description = description_text_view.text
@@ -214,14 +208,14 @@ extension CreateTaskViewController: UITextViewDelegate {
     func textViewDidBeginEditing(_ textView: UITextView) {
         if textView.text == "Описание" {
             textView.text = ""
-            textView.textColor = .black
+            textView.textColor = AppStyle.textPrimary
         }
     }
 
     func textViewDidEndEditing(_ textView: UITextView) {
         if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             textView.text = "Описание"
-            textView.textColor = .systemGray
+            textView.textColor = AppStyle.textSecondary
         }
     }
 }
